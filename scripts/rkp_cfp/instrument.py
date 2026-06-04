@@ -16,6 +16,27 @@
 
 import argparse
 import subprocess
+
+# ---- Python 3 compatibility for old Samsung RKP_CFP script ----
+def _rkp_cfp_text(x):
+    if isinstance(x, bytes):
+        return x.decode("utf-8", "replace")
+    return x
+
+_rkp_cfp_orig_check_output = subprocess.check_output
+def _rkp_cfp_check_output_text(*args, **kwargs):
+    kwargs.setdefault("universal_newlines", True)
+    return _rkp_cfp_orig_check_output(*args, **kwargs)
+subprocess.check_output = _rkp_cfp_check_output_text
+
+_rkp_cfp_orig_popen = subprocess.Popen
+def _rkp_cfp_popen_text(*args, **kwargs):
+    if kwargs.get("stdout") == subprocess.PIPE or kwargs.get("stderr") == subprocess.PIPE:
+        kwargs.setdefault("universal_newlines", True)
+    return _rkp_cfp_orig_popen(*args, **kwargs)
+subprocess.Popen = _rkp_cfp_popen_text
+# ---- end Python 3 compatibility ----
+
 import common
 import os
 import re
@@ -1042,6 +1063,7 @@ def parse_sections(vmlinux):
         except StopIteration:
             break
 
+        line = _rkp_cfp_text(line)
         m = re.search(r'^Sections:', line)
         if m:
             # first section
@@ -1206,11 +1228,37 @@ def to_twos_compl(x, nbits):
     return x
 
 def byte_string(xs):
-    if type(xs) == list:
-        return ''.join(xs)
-    elif type(xs) in [int, long]:
-        return ''.join([chr((xs >> 8*i) & 0xff) for i in xrange(3, -1, 0-1)])
+    if isinstance(xs, int):
+        if not (0 <= xs <= 0xffffffff):
+            raise ValueError("instruction integer out of 32-bit range: %r" % (xs,))
+        return xs.to_bytes(4, byteorder="big")
+
+    if isinstance(xs, bytes):
+        if len(xs) != 4:
+            raise ValueError("instruction bytes must be 4 bytes, got %d" % len(xs))
+        return xs
+
+    if isinstance(xs, bytearray):
+        xs = bytes(xs)
+        if len(xs) != 4:
+            raise ValueError("instruction bytearray must be 4 bytes, got %d" % len(xs))
+        return xs
+
+    if isinstance(xs, str):
+        xs = xs.encode("latin-1")
+        if len(xs) != 4:
+            raise ValueError("instruction string must be 4 bytes, got %d" % len(xs))
+        return xs
+
+    try:
+        xs = bytes(xs)
+    except TypeError:
+        xs = ''.join(xs).encode("latin-1")
+
+    if len(xs) != 4:
+        raise ValueError("instruction must be 4 bytes, got %d" % len(xs))
     return xs
+
 def hexint(b):
     return int(binascii.hexlify(byte_string(b)), 16)
 def mask_shift(insn, mask, shift):
@@ -1267,7 +1315,7 @@ if common.run_from_ipython():
     #import pdb; pdb.set_trace()
     o = load_and_cache_objdump(sample_vmlinux_file, config_file=sample_config_file)
 
-    print "in function common.run_from_ipython()"
+    print("in function common.run_from_ipython()")
 
     def _instrument(func=None, skip=common.skip, validate=True, threads=DEFAULT_THREADS):
         instrument(o, func=func, skip=common.skip, skip_stp=common.skip_stp, skip_asm=common.skip_asm, threads=threads)
