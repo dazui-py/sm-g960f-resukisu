@@ -579,7 +579,7 @@ class Objdump(object):
         if len(i_set) != 1 and i is None:
             raise RuntimeError("{func} occurs multiple times in vmlinux, specify which line from objdump you want ({i_set})".format(**locals()))
         elif i is None:
-            i = next(iter(i_set))
+            i = iter(i_set).next()
         else:
             assert i in i_set
         return i
@@ -767,7 +767,7 @@ class Objdump(object):
         [ ("func_1", 0), ("func_2", 1), ... ]
         """
         def __funcs():
-            for func, i_set in self.func_idx.items():
+            for func, i_set in self.func_idx.iteritems():
                 for i in i_set:
                     yield func, i
         funcs = list(__funcs())
@@ -785,7 +785,7 @@ class Objdump(object):
         def idx(i):
             return self._funcs[i][1]
         while lo <= hi:
-            mi = (hi + lo)//2
+            mi = (hi + lo)/2
             if i < idx(mi):
                 hi = mi-1
             elif i > idx(mi):
@@ -1017,7 +1017,7 @@ def parse_nm(vmlinux, symbols=None):
         m = re.search(NM_RE, line)
         if m:
             if last_symbol is not None and ( symbols is None or last_name in symbols ):
-                last_symbol[NE_SIZE] = ( _int(m.group('addr')) - _int(last_symbol[NE_ADDR]) ) // BYTES_PER_INSN \
+                last_symbol[NE_SIZE] = ( _int(m.group('addr')) - _int(last_symbol[NE_ADDR]) ) / BYTES_PER_INSN \
                             if \
                                 re.match(hex_re, last_symbol[NE_ADDR]) and \
                                 re.match(hex_re, m.group('addr')) \
@@ -1059,7 +1059,7 @@ def parse_sections(vmlinux):
     section_idx = 0
     while True:
         try:
-            line = next(it)
+            line = it.next()
         except StopIteration:
             break
 
@@ -1067,7 +1067,7 @@ def parse_sections(vmlinux):
         m = re.search(r'^Sections:', line)
         if m:
             # first section
-            next(it)
+            it.next()
             continue
 
         m = re.search((
@@ -1093,7 +1093,7 @@ def parse_sections(vmlinux):
                 [int, ['number']],
                 [parse_power, ['align']]]))
 
-            line = next(it)
+            line = it.next()
             # CONTENTS, ALLOC, LOAD, READONLY, CODE
             m = re.search((
             r'\s+(?P<type>.*)'
